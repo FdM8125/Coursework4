@@ -131,9 +131,15 @@ class CyclicPolynomial:
             if i == 0:
                 terms.append(f"{c}")
             elif i == 1:
-                terms.append(f"{c}*x")
+                if c == 1:
+                    terms.append("x")
+                else:
+                    terms.append(f"{c}*x")
             else:
-                terms.append(f"{c}*x^{i}")
+                if c == 1:
+                    terms.append(f"x^{i}")
+                else:
+                    terms.append(f"{c}*x^{i}")
 
         if not terms:
             return "0"

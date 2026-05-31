@@ -7,6 +7,7 @@ env/
 __pycache__/
 *.pyc
 *.pyo
+test.py
 
 # Токен доступа
 token

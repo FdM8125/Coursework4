@@ -22,3 +22,22 @@ def is_identity(mat):
     size = mat.shape[0]
     identity = np.eye(size, dtype=object)
     return np.array_equal(mat, identity)
+
+
+def compute_order(matrix, max_order=1000):
+    """
+    Находит наименьшее положительное t такое, что matrix^t = I.
+    Возвращает t или None, если порядок не найден в пределах max_order.
+    """
+    size = matrix.shape[0]
+    identity = np.eye(size, dtype=object)
+    if np.array_equal(matrix, identity):
+        return 1
+
+    current = matrix
+    for t in range(2, max_order + 1):
+        current = current @ matrix
+        if np.array_equal(current, identity):
+            return t
+
+    return None

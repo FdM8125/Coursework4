@@ -16,7 +16,7 @@
   department: "Кафедра компьютерной безопасности и\n  математических методов обработки информации\n",
   course_work: strong[Курсовая работа] + "\n",
   theme: strong[Методы комбинаторной теории групп в современной криптографии] + "\n",
-  city: "Ярославль 2025\n",
+  city: "Ярославль 2026\n",
 ) = {
   set align(center)
   set page(paper: "a4", margin: (top: 20mm, bottom: 20mm, right: 20mm, left: 30mm))

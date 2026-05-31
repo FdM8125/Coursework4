@@ -1,7 +1,7 @@
 import numpy as np
 import random
 from CyclicPolynomial import CyclicPolynomial
-from utils import compute_order, is_identity, mat_pow
+from utils import is_identity, mat_pow
 
 
 def random_polynomial(N, modulus, density=0.5):
@@ -49,18 +49,12 @@ class StickelProtocol:
         self.A = A
         self.B = B
         self.size = A.shape[0]
-        self.orderA = compute_order(A, max_order=10**6)
-        self.orderB = compute_order(B)
-
-        if self.orderA is None or self.orderB is None:
-            raise ValueError(
-                "Не удалось вычислить порядки матриц (возможно, они слишком велики)"
-            )
+        self.upper_bound = 10 * 6
 
     def alice_step(self):
-        """Алиса: выбирает n < orderA, m < orderB и вычисляет u = A^n * B^m."""
-        n = random.randint(0, self.orderA - 1)
-        m = random.randint(0, self.orderB - 1)
+        """Алиса: выбирает n < upper_bound, m < upper_bound и вычисляет u = A^n * B^m."""
+        n = random.randint(0, self.upper_bound - 1)
+        m = random.randint(0, self.upper_bound - 1)
         An = mat_pow(self.A, n)
         Bm = mat_pow(self.B, m)
         u = An @ Bm
@@ -68,8 +62,8 @@ class StickelProtocol:
 
     def bob_step(self):
         """Боб: выбирает r < orderA, s < orderB и вычисляет v = A^r * B^s."""
-        r = random.randint(0, self.orderA - 1)
-        s = random.randint(0, self.orderB - 1)
+        r = random.randint(0, self.upper_bound - 1)
+        s = random.randint(0, self.upper_bound - 1)
         Ar = mat_pow(self.A, r)
         Bs = mat_pow(self.B, s)
         v = Ar @ Bs

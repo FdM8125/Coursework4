@@ -1,11 +1,29 @@
 import numpy as np
+from CyclicPolynomial import CyclicPolynomial
+
+
+def get_identity_poly_matrix(size, N, modulus):
+    """Создает единичную матрицу из объектов CyclicPolynomial"""
+    identity = np.empty((size, size), dtype=object)
+    for i in range(size):
+        for j in range(size):
+            if i == j:
+                identity[i, j] = CyclicPolynomial(N, modulus, {0: 1})  # Полином '1'
+            else:
+                identity[i, j] = CyclicPolynomial(N, modulus, {})  # Полином '0'
+    return identity
 
 
 def mat_pow(mat, exponent):
     """Возведение матрицы (np.ndarray, dtype=object) в целую неотрицательную степень"""
     size = mat.shape[0]
 
-    result = np.eye(size, dtype=object)
+    # Достаем параметры кольца из первого элемента матрицы
+    sample_poly = mat[0, 0]
+    N = sample_poly.N
+    modulus = sample_poly.modulus
+
+    result = get_identity_poly_matrix(size, N, modulus)
     base = mat
     e = exponent
     while e > 0:
@@ -18,26 +36,11 @@ def mat_pow(mat, exponent):
 
 def is_identity(mat):
     """Проверка, является ли матрица единичной"""
-
     size = mat.shape[0]
-    identity = np.eye(size, dtype=object)
+
+    sample_poly = mat[0, 0]
+    N = sample_poly.N
+    modulus = sample_poly.modulus
+
+    identity = get_identity_poly_matrix(size, N, modulus)
     return np.array_equal(mat, identity)
-
-
-def compute_order(matrix, max_order=1000):
-    """
-    Находит наименьшее положительное t такое, что matrix^t = I.
-    Возвращает t или None, если порядок не найден в пределах max_order.
-    """
-    size = matrix.shape[0]
-    identity = np.eye(size, dtype=object)
-    if np.array_equal(matrix, identity):
-        return 1
-
-    current = matrix
-    for t in range(2, max_order + 1):
-        current = current @ matrix
-        if np.array_equal(current, identity):
-            return t
-
-    return None

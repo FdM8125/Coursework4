@@ -368,3 +368,606 @@ $
 Причина, по которой стоит брать конечное кольцо, заключается в том, что это хорошо для диффузии. Конечные кольца $R$ являются периодическими, что означает, что для любого $u in R$ существуют положительные целые числа $m, k$ такие, что $u^m = u^k$. Периодичность хороша для диффузии, поскольку порождает динамическую систему, а динамические системы с большим числом состояний обычно демонстрируют очень сложное поведение (например, знаменитая "$3x + 1$" задача).
 
 В качестве платформы для протокола Стикеля я выбрал полугруппу матриц над кольцом циклических многочленов над $ZZ_n$. Циклические многочлены --- это выражения вида $sum_(k = 0)^N a_k x^k$ с обычным сложением и умножением по правилу $x^i dot x^j = x^(i + j mod(N + 1))$, то есть это фактор-кольцо $faktor(ZZ_(n)[x], (x^(N + 1) - 1))$. Идеал порожденный  многочленом $x^(N + 1) - 1$ довольно прост, вычисления в этом фактор-кольце довольно эффективны. Кроме того, большое ключевое пространство обеспечивается с низкими затратами; например, при $n = 100, N = 20$ существует $100^21 = 10^42$ циклических многочленов, что дает $10^168$ матриц размера $2 times 2$ над этим кольцом.
+
+= Реализация протокола
+
+В этом разделе описывается разработанное приложение, реализующее протокол Стикеля на полугруппе матриц над кольцом циклических многочленов $faktor(ZZ_(n)[x], (x^(N + 1) - 1))$. Код написан на языке Python и использует библиотеку Streamlit для построения веб-интерфейса. Полные исходные тексты приведены в приложении. Файлы организованы в следующей структуре:
+#align(center)[
+  ```txt
+  project/
+  ├── app.py
+  ├── CyclicPolynomial.py
+  ├── protocol.py
+  ├── utils.py
+  └── requirements.txt
+  ```
+]
+
+== Архитектура разложения
+
+Программа написана на языке Python с использованием библиотеки Streamlit для веб-интерфейса. Логика разделена на модули:
+- CyclicPolynomial: определяет класс CyclicPolynomial, который представляет циклический многочлен. Хранит коэффициенты по модулю $n$, степень $N$ и реализует основные арифметические операции с привидением по модулю, а также возведение в степень.
+- utils.py: содержит вспомогательные функции: создание единичной матрицы из полиномов, быстрое возведение матрицы в степень и проверку, является ли матрица единичной.
+- protocol.py: реализует класс StickelProtocol, который выполняет шаги протокола (генерация секретных чисел, вычисление $u = A^n B^m$ и $v = A^r B^s$, формирование общего ключа).
+- app.py: главный файл с интерфейсом Streamlit. Позволяет задать параметры $n$ (модуль кольца), $N$ (максимальную степень), размер матриц, плотность ненулевых коэффициентов. Запускает протокол и выводит матрицы в формате LaTeX, а также результат совпадения ключей.
+
+Все матрицы хранятся в виде массивов NumPy с типом элемента object, что позволяет хранить в ячейках экземпляры CyclicPolynomial.
+
+== Ключевые алгоритмы
+
+=== Умножение циклических многочленов
+
+Умножение выполняется по правилу $x^i x^j = x^(i + j mod (N + 1))$ с последующим привидением коэффициентов по модулю $n$. Листинг @lst:mul показывает этот метод:
+#figure(
+  ```python
+      def _mul_poly(self, other):
+        """Умножение многочленов"""
+        res = CyclicPolynomial(self.N, self.modulus)
+        for i in range(self.M):
+            for j in range(self.M):
+                k = (i + j) % self.M
+                res[k] += self[i] * other[j]
+
+        return res
+  ```,
+  caption: "Умножение циклических многочленов",
+)<lst:mul>
+
+=== Быстрое возведение матрицы в степень
+
+Для вычисления $A^n$ используется бинарный алгоритм, реализованный в функции mat_pow (модуль utils.py). Листинг @lst:pow демонстрирует этот алгоритм:
+
+#figure(
+  ```py
+  def mat_pow(mat, exponent):
+    """Возведение матрицы (np.ndarray, dtype=object) в целую неотрицательную степень"""
+    size = mat.shape[0]
+
+    # Достаем параметры кольца из первого элемента матрицы
+    sample_poly = mat[0, 0]
+    N = sample_poly.N
+    modulus = sample_poly.modulus
+
+    result = get_identity_poly_matrix(size, N, modulus)
+    base = mat
+    e = exponent
+    while e > 0:
+        if e & 1:
+            result = result @ base
+        base = base @ base
+        e >>= 1
+    return result
+
+  ```,
+  caption: "Бинарное возведение матрицы в степень",
+)<lst:pow>
+
+=== Основной протокол
+Класс StickelProtocol инкапсулирует логику протокола. Метод run генерирует секретные числа для Алисы и Боба, обменивается сообщениями и вычисляет ключи:
+
+#figure(
+  ```py
+      def run(self):
+        """Запускает полный протокол и возвращает ключи, а также промежуточные значения."""
+        u, n, m = self.alice_step()
+        v, r, s = self.bob_step()
+        K_alice = self.alice_key(v, n, m)
+        K_bob = self.bob_key(u, r, s)
+        return {
+            "u": u,
+            "v": v,
+            "n": n,
+            "m": m,
+            "r": r,
+            "s": s,
+            "K_alice": K_alice,
+            "K_bob": K_bob,
+            "keys_match": np.array_equal(K_alice, K_bob),
+        }
+  ```,
+  caption: "Метод run",
+)
+
+Полный код доступен в приложении.
+
+== Пользовательский интерфейс
+
+Интерфейс реализован с помощью библиотеки Streamlit. После запуска команды `streamlit run app.py` пользователь видит боковую панель для ввода параметров (модуль $n$, максимальная степень $N$, размер матриц, плотность). По нажатию кнопки генерируются матрицы $A$ и $B$, причем проверяется условие $A B eq.not B A$. Затем выполняются шаги протокола и результаты отображаются в формате LaTeX.
+
+#figure(
+  image("screenshot.png", width: 80%),
+  caption: "Скриншот веб-интерфейса приложения",
+)
+
+== Зависимости
+
+Для воспроизведения окружения необходимо установить библиотеки, перечисленные в файле requirements.txt, который приведен в листинге @lst:req.
+
+#figure(
+  ```txt
+  streamlit>=1.28.0
+  numpy>=1.24.0
+  ```,
+  caption: "Файл requirements.txt",
+)<lst:req>
+
+Зависимости устанавливаются командой `pip install -r requirements.txt`.
+
+= Заключение
+
+В ходе выполнения данной курсовой работы были изучены основные понятия комбинаторной теории групп, необходимые для понимания некоммутативных криптографических протоколов: группы, полугруппы, подгруппы, гомоморфизмы, свободные группы, задание групп образующими и определяющими соотношениями. Особое внимание уделено алгоритмическим проблемам, лежащим в основе некоммутативной криптографии --- проблеме поиска сопряженного элемента (CSP) и проблеме разложения (DSP), к которой сводится криптоанализ протокола Стикеля.
+
+Был подробно разобран протокол обмена ключами Стикеля, являющийся некоммутативным аналогом классического протокола Диффи-Хеллмана. Рассмотрены требования к платформе протокола и обоснован выбор полугруппы матриц над кольцом циклических многочленов $faktor(ZZ_(n)[x], (x^(N + 1) - 1))$ как компромисса между эффективностью вычислений, стойкостью к некоторым атакам и простотой реализации.
+
+В практической части разработано приложение на языке Python с веб-интерфейсом на базе Streamlit, реализующее полный цикл протокола: генерацию публичных матриц $A$ и $B$ с заданными параметрами ($n$, $N$, размер, плотность), формирование секретных чисел Алисой и Бобом, вычисление промежуточных значений $u=A^n B^m$ и $v=A^r B^s$, а также итоговых ключей $K_A$ и $K_B$. Корректность работы протокола подтверждается совпадением полученных ключей.
+
+Разработанное программное обеспечение может служить как демонстрационный стенд для изучения некоммутативной криптографии, так и основа для дальнейших исследований — например, для анализа стойкости протокола при различных параметрах кольца или для адаптации к другим алгебраическим структурам.
+
+#set heading(numbering: none)
+
+#bibliography("books.yml", title: "Список литературы", full: true, style: "gost-r-705-2008-numeric")
+
+= Приложение A
+
+Полный коды всех модулей приведены ниже.
+
+Модуль CyclicPolynomial.py
+
+```python
+class CyclicPolynomial:
+    """Многочлен степени <= N с умножением x^i * x^j = x^{i + j (mod (N + 1)} над ZZ_n"""
+
+    def __init__(self, N, modulus, coeffs=None):
+        """
+        :param N: максимальная степень (порядок циклической группы мономов)
+        :param modulus: n - модуль кольца ZZ_n
+        :param coeffs: список, кортеж или словарь {степень: коэффициент}
+        """
+        if modulus <= 1:
+            raise ValueError("Модуль должен быть больше 1")
+        self.N = N
+        self.modulus = modulus
+        self.M = N + 1  # число мономов
+        self.coeffs = [0] * self.M
+
+        if coeffs is None:
+            return
+
+        if isinstance(coeffs, (list, tuple)):
+            for i, val in enumerate(coeffs):
+                if i < self.M:
+                    self.coeffs[i] = val % self.modulus
+
+        elif isinstance(coeffs, dict):
+            for deg, val in coeffs.items():
+                if 0 <= deg < self.M:
+                    self.coeffs[deg] = val % self.modulus
+
+        else:
+            raise TypeError("coeffs должен быть списком, кортежем или словарём")
+
+    def _mod(self, value):
+        """Приводит целое число к остатку по модулю self.modulus"""
+        return value % self.modulus
+
+    def __getitem__(self, idx):
+        return self.coeffs[idx]
+
+    def __setitem__(self, idx, value):
+        self.coeffs[idx] = self._mod(value)
+
+    def __len__(self):
+        return self.M
+
+    def __add__(self, other):
+        if not isinstance(other, CyclicPolynomial):
+            raise TypeError("Можно складывать только с CyclicPolynomial")
+
+        if self.N != other.N or self.modulus != other.modulus:
+            raise ValueError("Степени N и модули должны совпадать")
+
+        res = CyclicPolynomial(self.N, self.modulus)
+        for i in range(self.M):
+            res[i] = self[i] + other[i]
+
+        return res
+
+    def __sub__(self, other):
+        if not isinstance(other, CyclicPolynomial):
+            raise TypeError("Можно вычитать только CyclicPolynomial")
+
+        if self.N != other.N or self.modulus != other.modulus:
+            raise ValueError("Степени N и модули должны совпадать")
+
+        res = CyclicPolynomial(self.N, self.modulus)
+        for i in range(self.M):
+            res[i] = self[i] - other[i]
+
+        return res
+
+    def _mul_poly(self, other):
+        """Умножение многочленов"""
+        res = CyclicPolynomial(self.N, self.modulus)
+        for i in range(self.M):
+            for j in range(self.M):
+                k = (i + j) % self.M
+                res[k] += self[i] * other[j]
+
+        return res
+
+    def __mul__(self, other):
+        if isinstance(other, int):
+            scalar = other % self.modulus
+            res = CyclicPolynomial(self.N, self.modulus)
+            for i in range(self.M):
+                res[i] = self[i] * scalar
+            return res
+
+        if not isinstance(other, CyclicPolynomial):
+            return NotImplemented
+
+        if self.N != other.N or self.modulus != other.modulus:
+            raise ValueError("Степени N и модули должны совпадать")
+
+        return self._mul_poly(other)
+
+    def __rmul__(self, scalar):
+        # scalar * self
+        return self.__mul__(scalar)
+
+    def __pow__(self, exponent):
+        if exponent < 0:
+            raise ValueError("Степень должна быть неотрицательной")
+
+        result = CyclicPolynomial(self.N, self.modulus, {0: 1})  # x^0 = 1
+        base = self
+        while exponent:
+            if exponent & 1:
+                result = result * base
+            base = base * base
+            exponent >>= 1
+
+        return result
+
+    def __eq__(self, other):
+        if not isinstance(other, CyclicPolynomial):
+            return False
+
+        return (
+            self.N == other.N
+            and self.modulus == other.modulus
+            and self.coeffs == other.coeffs
+        )
+
+    def __str__(self):
+        terms = []
+        for i, c in enumerate(self.coeffs):
+            if c == 0:
+                continue
+            if i == 0:
+                terms.append(f"{c}")
+            elif i == 1:
+                if c == 1:
+                    terms.append("x")
+                else:
+                    terms.append(f"{c}*x")
+            else:
+                if c == 1:
+                    terms.append(f"x^{i}")
+                else:
+                    terms.append(f"{c}*x^{i}")
+
+        if not terms:
+            return "0"
+
+        return " + ".join(terms)
+
+    def __repr__(self):
+        return f"CyclicPolynomial(N={self.N}, modulus={self.modulus}), coeffs={self.coeffs}"
+
+    def degree(self):
+        """Степень многочлена"""
+        for i in range(self.M - 1, -1, -1):
+            if self.coeffs[i] != 0:
+                return i
+        return -1
+```<appendix:CyclicPolynomial>
+
+\
+
+Модуль utils.py
+
+```python
+import numpy as np
+from CyclicPolynomial import CyclicPolynomial
+
+
+def get_identity_poly_matrix(size, N, modulus):
+    """Создает единичную матрицу из объектов CyclicPolynomial"""
+    identity = np.empty((size, size), dtype=object)
+    for i in range(size):
+        for j in range(size):
+            if i == j:
+                identity[i, j] = CyclicPolynomial(N, modulus, {0: 1})  # Полином '1'
+            else:
+                identity[i, j] = CyclicPolynomial(N, modulus, {})  # Полином '0'
+    return identity
+
+
+def mat_pow(mat, exponent):
+    """Возведение матрицы (np.ndarray, dtype=object) в целую неотрицательную степень"""
+    size = mat.shape[0]
+
+    # Достаем параметры кольца из первого элемента матрицы
+    sample_poly = mat[0, 0]
+    N = sample_poly.N
+    modulus = sample_poly.modulus
+
+    result = get_identity_poly_matrix(size, N, modulus)
+    base = mat
+    e = exponent
+    while e > 0:
+        if e & 1:
+            result = result @ base
+        base = base @ base
+        e >>= 1
+    return result
+
+
+def is_identity(mat):
+    """Проверка, является ли матрица единичной"""
+    size = mat.shape[0]
+
+    sample_poly = mat[0, 0]
+    N = sample_poly.N
+    modulus = sample_poly.modulus
+
+    identity = get_identity_poly_matrix(size, N, modulus)
+    return np.array_equal(mat, identity)
+```<appendix:utils>
+
+\
+
+Модуль protocol.py
+
+```python
+import numpy as np
+import random
+from CyclicPolynomial import CyclicPolynomial
+from utils import is_identity, mat_pow
+
+
+def random_polynomial(N, modulus, density=0.5):
+    """
+    Генерирует случайный многочлен из CyclicPolynomial.
+    density: вероятность того, что коэффициент при каждой степени ненулевой.
+    """
+    coeffs = {}
+    for deg in range(N + 1):
+        if random.random() < density:
+            coeffs[deg] = random.randint(0, modulus - 1)
+    return CyclicPolynomial(N, modulus, coeffs)
+
+
+def generate_random_matrix(size, N, modulus, density=0.5):
+    """
+    Генерирует квадратную матрицу случайных многочленов.
+    """
+    mat = np.empty((size, size), dtype=object)
+    for i in range(size):
+        for j in range(size):
+            mat[i, j] = random_polynomial(N, modulus, density)
+    return mat
+
+
+def is_identity_matrix(mat):
+    return is_identity(mat)
+
+
+class StickelProtocol:
+    """
+    Реализация протокола Стикеля для матриц над кольцом циклических многочленов.
+    Публичные параметры: матрицы A и B, такие, что AB != BA.
+    """
+
+    def __init__(self, A, B):
+        """
+        A, B: numpy массивы (dtype = object) размера d x d.
+        """
+        if A.shape != B.shape or A.ndim != 2 or A.shape[0] != A.shape[1]:
+            raise ValueError(
+                "A и B должны быть квадратными матрицами одинакового размера"
+            )
+
+        self.A = A
+        self.B = B
+        self.size = A.shape[0]
+        self.upper_bound = 10 * 6
+
+    def alice_step(self):
+        """Алиса: выбирает n < upper_bound, m < upper_bound и вычисляет u = A^n * B^m."""
+        n = random.randint(0, self.upper_bound - 1)
+        m = random.randint(0, self.upper_bound - 1)
+        An = mat_pow(self.A, n)
+        Bm = mat_pow(self.B, m)
+        u = An @ Bm
+        return u, n, m
+
+    def bob_step(self):
+        """Боб: выбирает r < orderA, s < orderB и вычисляет v = A^r * B^s."""
+        r = random.randint(0, self.upper_bound - 1)
+        s = random.randint(0, self.upper_bound - 1)
+        Ar = mat_pow(self.A, r)
+        Bs = mat_pow(self.B, s)
+        v = Ar @ Bs
+        return v, r, s
+
+    def alice_key(self, v, n, m):
+        """Алиса вычисляет общий ключ: K_A = A^n * v * B^m"""
+        An = mat_pow(self.A, n)
+        Bm = mat_pow(self.B, m)
+        return An @ v @ Bm
+
+    def bob_key(self, u, r, s):
+        """Боб вычисляет общий ключ: K_B = A^r * u * B^s"""
+        Ar = mat_pow(self.A, r)
+        Bs = mat_pow(self.B, s)
+        return Ar @ u @ Bs
+
+    def run(self):
+        """Запускает полный протокол и возвращает ключи, а также промежуточные значения."""
+        u, n, m = self.alice_step()
+        v, r, s = self.bob_step()
+        K_alice = self.alice_key(v, n, m)
+        K_bob = self.bob_key(u, r, s)
+        return {
+            "u": u,
+            "v": v,
+            "n": n,
+            "m": m,
+            "r": r,
+            "s": s,
+            "K_alice": K_alice,
+            "K_bob": K_bob,
+            "keys_match": np.array_equal(K_alice, K_bob),
+        }
+```<appendix:protocol>
+
+\
+
+Модуль app.py
+
+```python
+import streamlit as st
+import numpy as np
+
+# Импортируем ваши классы
+from CyclicPolynomial import CyclicPolynomial
+from protocol import StickelProtocol, generate_random_matrix
+
+
+def poly_to_latex(poly):
+    """Преобразует CyclicPolynomial в строку LaTeX"""
+    if not isinstance(poly, CyclicPolynomial):
+        return str(poly)
+
+    terms = []
+    for i, c in enumerate(poly.coeffs):
+        if c == 0:
+            continue
+        if i == 0:
+            terms.append(f"{c}")
+        elif i == 1:
+            terms.append("x" if c == 1 else f"{c}x")
+        else:
+            terms.append(f"x^{{{i}}}" if c == 1 else f"{c}x^{{{i}}}")
+
+    if not terms:
+        return "0"
+    return " + ".join(terms)
+
+
+def matrix_to_latex(mat):
+    """Преобразует numpy матрицу полиномов в строку LaTeX"""
+    rows, cols = mat.shape
+    latex_str = r"\begin{pmatrix}" + "\n"
+    for i in range(rows):
+        row_strs = [poly_to_latex(mat[i, j]) for j in range(cols)]
+        latex_str += " & ".join(row_strs) + r" \\" + "\n"
+    latex_str += r"\end{pmatrix}"
+    return latex_str
+
+
+# --- ИНТЕРФЕЙС STREAMLIT ---
+st.set_page_config(page_title="Stickel Protocol", layout="wide")
+st.title("Протокол Стикеля над циклическими многочленами")
+
+st.sidebar.header("Параметры генерации")
+modulus = st.sidebar.number_input(
+    "Модуль кольца ($n$)", min_value=2, max_value=100, value=7, step=1
+)
+N = st.sidebar.number_input(
+    "Макс. степень многочлена ($N$)", min_value=1, max_value=10, value=3, step=1
+)
+matrix_size = st.sidebar.slider("Размер матриц", min_value=2, max_value=4, value=2)
+density = st.sidebar.slider(
+    "Плотность (вероятность ненулевого коэффициента)",
+    min_value=0.1,
+    max_value=1.0,
+    value=0.6,
+)
+
+if st.sidebar.button("Сгенерировать и запустить протокол", type="primary"):
+    # Генерация матриц, проверяем чтобы они не коммутировали (AB != BA)
+    with st.spinner("Генерация матриц и выполнение протокола..."):
+        while True:
+            A = generate_random_matrix(matrix_size, N, modulus, density)
+            B = generate_random_matrix(matrix_size, N, modulus, density)
+            if not np.array_equal(A @ B, B @ A):
+                break
+
+        # Запуск протокола
+        protocol = StickelProtocol(A, B)
+        results = protocol.run()
+
+    # Вывод публичных матриц
+    st.header("1. Публичные параметры")
+    st.write(
+        "Матрицы $A$ и $B$ над $\mathbb{Z}_{"
+        + str(modulus)
+        + "}[x]/(x^{"
+        + str(N + 1)
+        + "}-1)$:"
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Матрица $A$")
+        st.latex(r"A = " + matrix_to_latex(A))
+    with col2:
+        st.subheader("Матрица $B$")
+        st.latex(r"B = " + matrix_to_latex(B))
+
+    st.divider()
+
+    # Обмен ключами
+    st.header("2. Обмен сообщениями")
+
+    col_alice, col_bob = st.columns(2)
+    with col_alice:
+        st.subheader("👩 Алиса")
+        st.write(
+            f"Генерирует секретные числа: $n = {results['n']}$, $m = {results['m']}$"
+        )
+        st.write("Вычисляет и отправляет $u = A^n B^m$:")
+        st.latex(r"u = " + matrix_to_latex(results["u"]))
+
+    with col_bob:
+        st.subheader("👨 Боб")
+        st.write(
+            f"Генерирует секретные числа: $r = {results['r']}$, $s = {results['s']}$"
+        )
+        st.write("Вычисляет и отправляет $v = A^r B^s$:")
+        st.latex(r"v = " + matrix_to_latex(results["v"]))
+
+    st.divider()
+
+    # Вычисление общего ключа
+    st.header("3. Вычисление общего ключа")
+    st.write(
+        "Каждая сторона вычисляет общий секрет: $K_A = A^n v B^m$ и $K_B = A^r u B^s$."
+    )
+
+    col_k1, col_k2 = st.columns(2)
+    with col_k1:
+        st.markdown("**Ключ, вычисленный Алисой ($K_A$):**")
+        st.latex(r"K_A = " + matrix_to_latex(results["K_alice"]))
+    with col_k2:
+        st.markdown("**Ключ, вычисленный Бобом ($K_B$):**")
+        st.latex(r"K_B = " + matrix_to_latex(results["K_bob"]))
+
+    if results["keys_match"]:
+        st.success("✅ Протокол успешно завершен! Ключи Алисы и Боба совпадают.")
+    else:
+        st.error("❌ Ошибка! Ключи не совпадают.")
+```<appendix:app>

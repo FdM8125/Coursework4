@@ -1,0 +1,45 @@
+VGD:
+  type: Book
+  title: Методы комбинаторной теории групп в современной криптографии
+  author:
+    - Дурнев, В. Г.
+    - Зеткина, О. В.
+  page-total: 52
+  date: 2017
+
+Kargapolov:
+  type: Book
+  title: Основы теории групп
+  author:
+    - Каргаполов, М. И.
+    - Мерзляков, Ю. И.
+  page-total: 288
+  date: 1982
+
+MKS:
+  type: Book
+  title: Комбинаторная теория групп
+  author:
+    - Магнус, В.
+    - Каррас, А.
+    - Солитэр, Д.
+  page-total: 456
+  date: 1974
+
+Vinberg:
+  type: Book
+  title: Курс алгебры
+  author:
+    - Винберг, Э. Б.
+  page-total: 592
+  date: 2024
+
+MSU:
+  type: Book
+  title: Non-commutative Cryptography and Complexity of Group-theoretic Problems
+  author:
+    - Myasnikov, A.
+    - Shpilrain, V.
+    - Ushakov, A.
+  page-total: 385
+  date: 2011

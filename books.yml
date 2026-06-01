@@ -1,11 +1,12 @@
-VGD:
+MKS:
   type: Book
-  title: Методы комбинаторной теории групп в современной криптографии
+  title: Комбинаторная теория групп
   author:
-    - Дурнев, В. Г.
-    - Зеткина, О. В.
-  page-total: 52
-  date: 2017
+    - Магнус, В.
+    - Каррас, А.
+    - Солитэр, Д.
+  page-total: 456
+  date: 1974
 
 Kargapolov:
   type: Book
@@ -16,15 +17,14 @@ Kargapolov:
   page-total: 288
   date: 1982
 
-MKS:
+VGD:
   type: Book
-  title: Комбинаторная теория групп
+  title: Методы комбинаторной теории групп в современной криптографии
   author:
-    - Магнус, В.
-    - Каррас, А.
-    - Солитэр, Д.
-  page-total: 456
-  date: 1974
+    - Дурнев, В. Г.
+    - Зеткина, О. В.
+  page-total: 52
+  date: 2017
 
 Vinberg:
   type: Book

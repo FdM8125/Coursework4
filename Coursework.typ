@@ -325,7 +325,7 @@ $
 
       _seq("Алиса", "Боб", comment: $u = a^n b^m$, comment-align: "center")
       _seq("Боб", "Алиса", comment: $v = a^r b^s$, comment-align: "center")
-      _seq("Алиса", "Алиса", comment: $K_A = a^n v b^n$, comment-align: "center", flip: true)
+      _seq("Алиса", "Алиса", comment: $K_A = a^n v b^m$, comment-align: "center", flip: true)
       _seq("Боб", "Боб", comment: $K_B = a^r u b^s$, comment-align: "center")
     }),
     caption: "Протокол Стикеля",
